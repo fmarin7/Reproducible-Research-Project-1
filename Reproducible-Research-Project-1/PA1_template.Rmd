@@ -1,5 +1,5 @@
 ---
-title: "PA1_template"
+title: "Reproducible Research Week 2 Project"
 author: "Fernando Marin"
 date: "January 13, 2018"
 output: 
@@ -12,22 +12,161 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+### Loading the data:
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+act_data <- read.csv("./Data/activity.csv")
+```
+Here's a summary of the data:
+```{r}
+summary(act_data)
 ```
 
-## Including Plots
+### What is mean total number of steps taken per day?
+For this part of the assignment, you can ignore the missing values in the dataset.
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+ 1. Calculate the total number of steps taken per day
+```{r}
+library(ggplot2)
+totalSteps <- aggregate(act_data$steps, by = list(Date = act_data$date), FUN = sum)
+names(totalSteps)[names(totalSteps) == "x"] <- "Total"
+temp <- as.Date(totalSteps$Date, "%Y-%m-%d")
+totalSteps$Date <- format(temp, format = "%m-%d")
+head(totalSteps)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+ 2. Make a histogram of the total number of steps taken each day
+```{r}
+hist1 <- ggplot(data = na.omit(totalSteps), aes(Total))+
+        geom_histogram(binwidth = 500, color = "white")+
+        xlab("Number of Steps Taken Each Day")+
+        ylab("Count")+
+        ggtitle("Steps")
+print(hist1)
+```
+
+ 3. Calculate and report the mean and median of the total number of steps taken per day
+ 
+        This is the mean:
+        
+ ```{r}
+ mean(na.omit(totalSteps$Total))
+ ```
+ 
+        This is the median:
+        
+```{r}
+median(na.omit(totalSteps$Total))
+```
+
+### What is the average daily activity pattern?
+
+ 1. Make a time series plot of the 5-minute interval(x-axis) and the average
+ number of steps taken, averaged across all days (y-axis)
+ 
+```{r}
+fiveMinSteps <- aggregate(steps~interval, data = act_data, FUN = mean)
+TS1 <- ggplot(data = fiveMinSteps, aes(x = interval, y = steps))+
+        geom_line()+
+        xlab("5-Minute Time Intervals")+
+        ylab("Average Number of Steps")+
+        ggtitle("Average Number of Steps on 5-minute Time Intervals")
+print(TS1)
+```
+
+ 2. Which 5-minute interval, on average across all the days in the dataset, 
+ contains the maximum number of steps?
+ 
+```{r}
+fiveMinSteps[which(fiveMinSteps$steps == max(fiveMinSteps$steps)),]
+```
+
+### Inputtig missing values
+
+ 1. Calculate and report the total number of missing values in the dataset (i.e., 
+ the total number of rows with NAs)
+ 
+```{r}
+sapply(X = act_data, FUN = function(x) sum(is.na(x)))
+```
+
+ 2. Devise a strategy for filling in all of the missing values in the dataset. The strategy doesn't need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+```{r}
+library(dplyr)
+
+fillMissingVals <- function(num) replace(num, is.na(num), mean(num, na.rm = TRUE))
+meanofDay <- (act_data %>% group_by(interval) %>% mutate(steps = fillMissingVals(steps)))
+head(meanofDay)
+sum(is.na(meanofDay))
+```
+
+ 3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+ 
+```{r}
+newDataset <- as.data.frame(meanofDay)
+head(newDataset)
+summary(newDataset)
+```
+
+ 4. Make a histogram of the total number of steps taken each day and calculate and report the mean and the median total number of steps taken per day. Do these values differfrom the first part of the assignment? What is the impact of imputting missing data on the estimates of the total daily number of steps?
+ 
+```{r}
+newSteps <- aggregate(newDataset$steps, by = list(newDataset$date), FUN = sum)
+names(newSteps)[names(newSteps) == "x"] <- "Total"
+names(newSteps)[names(newSteps) == "Group.1"] <- "Date"
+hist2 <- ggplot(data = newSteps, aes(Total))+
+        geom_histogram(binwidth = 500, color = "white")+
+        xlab("Number of Steps per Day")+
+        ylab("Count")+
+        ggtitle("Steps with missing values filled in")
+print(hist2)
+```
+Comparing the two plots:
+
+```{r}
+library(grid)
+library(gridExtra)
+grid.arrange(hist1, hist2, ncol = 2)
+```
+
+Calculating means:
+```{r}
+mean(na.omit(totalSteps$Total))
+mean(newSteps$Total)
+```
+
+Calculating medians:
+```{r}
+median(na.omit(totalSteps$Total))
+median(newSteps$Total)
+```
+Looking at the histograms we can see that they are slighty different. Also, while the means are the same, the medians are different as well.
+
+### Are there differences in activity pattern between weekdays and weekends?
+
+ 1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or a weekend day.
+ 
+```{r}
+newDataset$WeekendOrWeekday <- ifelse(weekdays(as.Date(newDataset$date)) %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"), "Weekday", "Weekend")
+head(newDataset)
+```
+
+ 2. Make a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekdays or weekend days (y-axis). 
+ 
+```{r}
+newDataset <- (newDataset %>% group_by(interval, WeekendOrWeekday) %>% summarise(Mean = mean(steps)))
+ggplot(newDataset, mapping = aes(x = interval, y = Mean)) + geom_line() +
+    facet_grid(WeekendOrWeekday ~.) + xlab("Interval") + ylab("Mean of Steps") +
+    ggtitle("Comparison of Average Number of Steps: Weekend & Weekday")
+```
+
+By comparing the plots we can see that, though they are similar, they are not identical. Therefore there are some differences in actvity patterns between weekdays and weekends.
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
